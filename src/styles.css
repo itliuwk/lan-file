@@ -1291,7 +1291,7 @@ main {
 }
 @media (min-width: 1500px) {
   .header {
-    height: 96px;
+    height: 60px;
   }
   .hero {
     padding-top: 57px;

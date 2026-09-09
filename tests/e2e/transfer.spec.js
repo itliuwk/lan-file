@@ -42,6 +42,32 @@ test("scan QR on LAN, exchange text and exact file bytes, reject, disconnect and
     timeout: 30000,
   });
   await expect(phone.getByText("已建立直连", { exact: true })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        position: window.scrollY,
+        bottom:
+          document.documentElement.scrollHeight -
+          document.documentElement.clientHeight,
+      })),
+    )
+    .toMatchObject({
+      position: expect.any(Number),
+      bottom: expect.any(Number),
+    });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          Math.abs(
+            window.scrollY -
+              (document.documentElement.scrollHeight -
+                document.documentElement.clientHeight),
+          ) <= 2,
+      ),
+    )
+    .toBe(true);
+  expect(await phone.evaluate(() => window.scrollY)).toBe(0);
   expect(
     await phone
       .locator('textarea[aria-label="输入消息"]')

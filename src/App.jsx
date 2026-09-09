@@ -278,6 +278,18 @@ export default function App() {
   }, [messages.length, transfers.length, connected]);
 
   useEffect(() => {
+    if (!connected || isMobile) return;
+    // Wait for the transfer panel to replace the QR panel before measuring the page.
+    const frame = requestAnimationFrame(() => {
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [connected]);
+
+  useEffect(() => {
     if (!modal) return;
     const previous = document.activeElement;
     const trapFocus = (event) => {

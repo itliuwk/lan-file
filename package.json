@@ -1,0 +1,41 @@
+{
+  "name": "lan-drop",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js --dev",
+    "build": "vite build",
+    "start": "pm2 start ecosystem.config.cjs",
+    "test": "node --test tests/server.test.js",
+    "test:e2e": "playwright test",
+    "package:win": "node scripts/build-portable.mjs",
+    "test:portable": "node scripts/test-portable.mjs",
+    "start:direct": "node server/index.js",
+    "restart": "pm2 restart ecosystem.config.cjs --update-env",
+    "stop": "pm2 stop lan-drop",
+    "logs": "pm2 logs lan-drop",
+    "status": "pm2 list",
+    "pm2:delete": "pm2 delete lan-drop",
+    "test:pm2": "node --test tests/pm2.test.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "lucide-react": "^0.468.0",
+    "pm2": "^7.0.4",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.28.2",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "postject": "^1.0.0-alpha.6",
+    "prettier": "^3.9.6",
+    "vite": "^6.1.0"
+  }
+}

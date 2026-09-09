@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.env
+reference.html
+.packaging/
+release/
+artifacts/

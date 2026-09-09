@@ -42,6 +42,18 @@ test("scan QR on LAN, exchange text and exact file bytes, reject, disconnect and
     timeout: 30000,
   });
   await expect(phone.getByText("已建立直连", { exact: true })).toBeVisible();
+  expect(
+    await phone
+      .locator('textarea[aria-label="输入消息"]')
+      .evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).fontSize),
+      ),
+  ).toBeGreaterThanOrEqual(16);
+  const viewport = await phone
+    .locator('meta[name="viewport"]')
+    .getAttribute("content");
+  expect(viewport).toContain("maximum-scale=1");
+  expect(viewport).toContain("user-scalable=no");
   expect(await phone.evaluate(() => isSecureContext)).toBe(false);
   await page
     .getByRole("textbox", { name: "输入消息" })
@@ -55,13 +67,11 @@ test("scan QR on LAN, exchange text and exact file bytes, reject, disconnect and
   await expect(page.getByText("电脑已收到吗？", { exact: true })).toBeVisible();
   const payload = Buffer.alloc(3 * 1024 * 1024 + 137);
   for (let i = 0; i < payload.length; i++) payload[i] = (i * 17 + 3) % 256;
-  await page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "旅行照片测试.bin",
-      mimeType: "application/octet-stream",
-      buffer: payload,
-    });
+  await page.locator("input[type=file]").setInputFiles({
+    name: "旅行照片测试.bin",
+    mimeType: "application/octet-stream",
+    buffer: payload,
+  });
   await expect(phone.getByText("旅行照片测试.bin")).toBeVisible();
   await phone.getByRole("button", { name: "保存并接收" }).click();
   await expect(phone.getByRole("link", { name: "保存文件" })).toBeVisible({
@@ -108,13 +118,11 @@ test("scan QR on LAN, exchange text and exact file bytes, reject, disconnect and
   expect(
     await fs.readFile(await (await reverseDownloadEvent).path(), "utf8"),
   ).toBe("手机 → 电脑");
-  await page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "拒收.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("reject"),
-    });
+  await page.locator("input[type=file]").setInputFiles({
+    name: "拒收.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("reject"),
+  });
   await phone
     .locator(".file-card")
     .filter({ hasText: "拒收.txt" })

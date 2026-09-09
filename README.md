@@ -1,6 +1,6 @@
 # 轻传 · 局域网文件快传
 
-打开页面自动生成二维码，另一台设备扫码后直接连接，双向发送文件和文字。无需房间码、账号或外部服务。
+打开页面自动生成二维码，另一台设备扫码后直接连接，双向发送文件和文字。无需账号或外部服务。
 
 ## 打包为双击启动的程序
 
@@ -70,8 +70,8 @@ PM2 进程守护不等于系统开机自启。Linux 服务器需要开机恢复�
 proxy_http_version 1.1;
 proxy_set_header Upgrade $http_upgrade;
 proxy_set_header Connection "upgrade";
-proxy_set_header Host $host;
-proxy_set_header X-Forwarded-Host $host;
+proxy_set_header Host $http_host;
+proxy_set_header X-Forwarded-Host $http_host;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
@@ -87,7 +87,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 ## 使用
 
-- 首页自动显示二维码；扫码立即配对，不需要创建或输入房间码。
+- 首页自动显示二维码；扫码立即配对。
 - 连接后选择、拖入文件或粘贴图片。对方点击「保存并接收」后开始传输。
 - 支持批量选择（每批最多 30 个文件）、实时进度、速度、取消与拒收。
 - 支持文字消息、复制消息；Enter 发送，Shift + Enter 换行。

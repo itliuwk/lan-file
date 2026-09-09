@@ -760,7 +760,7 @@ export default function App() {
                       刷新二维码
                     </button>
                   </div>
-                  {network.interfaces.length > 1 && (
+                  {/* {network.interfaces.length > 1 && (
                     <label className="network-select">
                       网络地址
                       <select
@@ -778,7 +778,7 @@ export default function App() {
                       </select>
                       <ChevronDown size={12} />
                     </label>
-                  )}
+                  )} */}
                   <div className="same-network-note">
                     <Wifi size={16} />
                     <span>请确保两台设备连接同一个 Wi-Fi 或局域网</span>

@@ -481,6 +481,86 @@ main {
   flex-direction: column;
   min-height: 489px;
 }
+.discovery-panel {
+  width: 100%;
+  max-width: 440px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+}
+.discovery-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.discovery-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.discovery-heading > span,
+.discovery-self,
+.discovery-note {
+  color: #71837f;
+  font-size: 11px;
+}
+.discovery-self {
+  margin-top: 8px;
+}
+.discovery-note {
+  margin-top: 10px;
+}
+.discovery-empty {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--soft);
+  color: #71837f;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.discovery-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.discovery-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.discovery-icon {
+  color: var(--teal);
+  flex-shrink: 0;
+}
+.discovery-detail {
+  flex: 1;
+  min-width: 0;
+}
+.discovery-detail strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+}
+.discovery-detail small {
+  display: block;
+  color: #71837f;
+  font-size: 10px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.discovery-list button {
+  flex-shrink: 0;
+  min-height: 36px;
+}
 .scan-eyebrow {
   display: inline-flex;
   align-items: center;

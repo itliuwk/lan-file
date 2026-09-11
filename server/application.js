@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
+import { clientAddress, discoveryScopes } from "./discovery.js";
 
 import { spawn } from "node:child_process";
 
@@ -31,10 +32,14 @@ export async function startServer({
     String(Array.isArray(value) ? value[0] : value || "")
       .split(",")[0]
       .trim();
-  const address = (req) =>
-    firstHeader(req.headers["x-forwarded-for"]) ||
-    req.socket.remoteAddress?.replace(/^::ffff:/, "") ||
-    "";
+  const trustedProxies = (process.env.TRUSTED_PROXIES || "")
+    .split(",")
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+  const address = (req) => clientAddress(req, trustedProxies);
+  const discoveryNetworks = Object.values(os.networkInterfaces())
+    .flat()
+    .filter((network) => network.family === "IPv4" && !network.internal);
   const requestHosts = (req) => {
     const hosts = [
       firstHeader(req.headers.host),
@@ -63,6 +68,40 @@ export async function startServer({
     res.json({ ok: true, websocket: "/signal", port }),
   );
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+  const sameNetwork = (a, b) =>
+    a.scopes.some((scope) => b.scopes.includes(scope));
+  const available = (ws) =>
+    ws.readyState === WebSocket.OPEN && rooms.get(ws.room)?.members.size === 1;
+  const deviceInfo = (ws) => ({
+    id: ws.id,
+    name: ws.name,
+    device: ws.device,
+    ip: ws.ip,
+    available: available(ws),
+  });
+  function publishDevices() {
+    const registered = [...wss.clients].filter(
+      (ws) => ws.discovery && ws.room && ws.readyState === WebSocket.OPEN,
+    );
+    for (const ws of wss.clients) {
+      if (!ws.discovery) continue;
+      send(ws, {
+        type: "devices",
+        self: deviceInfo(ws),
+        devices: registered
+          .filter((peer) => peer !== ws && sameNetwork(ws, peer))
+          .map(deviceInfo),
+      });
+    }
+  }
+  function pair(ws, peer, code) {
+    const room = rooms.get(code);
+    room.members.add(ws);
+    ws.room = code;
+    send(ws, { type: "room", code, ip: ws.ip });
+    send(ws, { type: "peer-joined", initiator: false, ...deviceInfo(peer) });
+    send(peer, { type: "peer-joined", initiator: true, ...deviceInfo(ws) });
+  }
   server.on("upgrade", (req, socket, head) => {
     let pathname;
     try {
@@ -107,6 +146,10 @@ export async function startServer({
 
   wss.on("connection", (ws, req) => {
     ws.ip = address(req);
+    ws.id = randomBytes(12).toString("hex");
+    ws.scopes = discoveryScopes(ws.ip, discoveryNetworks);
+    ws.name = "电脑";
+    ws.device = "desktop";
     ws.alive = true;
     ws.on("pong", () => {
       ws.alive = true;
@@ -137,6 +180,8 @@ export async function startServer({
           return;
         }
         ws.device = data.device === "mobile" ? "mobile" : "desktop";
+        ws.name = `${ws.device === "mobile" ? "移动设备" : "电脑"} · ${ws.id.slice(0, 4).toUpperCase()}`;
+        ws.discovery = data.discovery === true;
         if (data.type === "create") {
           if (rooms.size >= 1000) {
             send(ws, { type: "error", message: "服务繁忙，请稍后重试。" });
@@ -167,22 +212,39 @@ export async function startServer({
             return;
           }
           const peer = [...room.members][0];
-          room.members.add(ws);
-          ws.room = code;
-          send(ws, { type: "room", code, ip: ws.ip });
-          send(ws, {
-            type: "peer-joined",
-            initiator: false,
-            ip: peer.ip,
-            device: peer.device,
-          });
-          send(peer, {
-            type: "peer-joined",
-            initiator: true,
-            ip: ws.ip,
-            device: ws.device,
-          });
+          pair(ws, peer, code);
         }
+        publishDevices();
+      } else if (data.type === "connect-device") {
+        const peer = [...wss.clients].find(
+          (candidate) => candidate.id === data.id,
+        );
+        if (
+          !peer ||
+          !peer.discovery ||
+          peer === ws ||
+          !sameNetwork(ws, peer) ||
+          !available(peer)
+        ) {
+          send(ws, {
+            type: "error",
+            message: "该设备已离线或正在连接其他设备，请选择其他设备。",
+          });
+          publishDevices();
+          return;
+        }
+        if (!available(ws)) {
+          send(ws, {
+            type: "error",
+            message: "请先断开当前连接，再连接其他设备。",
+          });
+          return;
+        }
+        // Validate before leaving: a stale list must never destroy a waiting room.
+        const code = peer.room;
+        leave(ws);
+        pair(ws, peer, code);
+        publishDevices();
       } else if (data.type === "signal") {
         const room = rooms.get(ws.room);
         if (room && data.signal && typeof data.signal === "object") {
@@ -193,9 +255,13 @@ export async function startServer({
       } else if (data.type === "leave") {
         leave(ws);
         send(ws, { type: "left" });
+        publishDevices();
       }
     });
-    ws.on("close", () => leave(ws));
+    ws.on("close", () => {
+      leave(ws);
+      publishDevices();
+    });
     ws.on("error", () => {});
   });
 
@@ -220,6 +286,7 @@ export async function startServer({
         rooms.delete(code);
       }
     }
+    publishDevices();
   }, 30000);
   timer.unref();
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import { WebSocket } from "ws";
+import { clientAddress, discoveryScopes } from "../server/discovery.js";
 const port = 3018;
 let server;
 const clients = [];
@@ -24,9 +25,10 @@ after(() => {
   for (const ws of clients) ws.terminate();
   server?.kill();
 });
-async function client() {
+async function client(headers = {}) {
   const ws = new WebSocket(`ws://localhost:${port}/signal`, {
     origin: `http://localhost:${port}`,
+    headers,
   });
   clients.push(ws);
   await new Promise((resolve, reject) => {
@@ -53,6 +55,89 @@ function next(ws, type) {
   });
 }
 const send = (ws, data) => ws.send(JSON.stringify(data));
+test("discovery uses actual subnet masks and trusts only configured proxy hops", () => {
+  const networks = [
+    { address: "192.168.10.4", netmask: "255.255.254.0" },
+    { address: "10.2.0.4", netmask: "255.255.255.0" },
+    { address: "203.0.113.4", netmask: "255.255.255.0" },
+  ];
+  const shared = (a, b) =>
+    discoveryScopes(a, networks).some((scope) =>
+      discoveryScopes(b, networks).includes(scope),
+    );
+  assert.ok(shared("127.0.0.1", "192.168.11.40"));
+  assert.ok(shared("192.168.10.20", "192.168.11.40"));
+  assert.ok(!shared("192.168.10.20", "192.168.12.40"));
+  assert.ok(!shared("192.168.10.20", "10.2.0.40"));
+  assert.ok(!shared("203.0.113.1", "203.0.113.2"));
+  assert.ok(shared("203.0.113.1", "203.0.113.1"));
+  const request = {
+    socket: { remoteAddress: "::ffff:192.168.10.20" },
+    headers: { "x-forwarded-for": "203.0.113.1, 198.51.100.2" },
+  };
+  assert.equal(clientAddress(request), "192.168.10.20");
+  assert.equal(clientAddress(request, ["192.168.10.20"]), "198.51.100.2");
+  request.socket.remoteAddress = "::1";
+  assert.equal(clientAddress(request), "198.51.100.2");
+  request.headers["x-forwarded-for"] = "invalid";
+  assert.equal(clientAddress(request), "::1");
+});
+
+test("discovery isolates networks, connects atomically, and updates busy/offline peers", async (t) => {
+  const a = await client({ "x-forwarded-for": "203.0.113.10" });
+  const b = await client({ "x-forwarded-for": "203.0.113.10" });
+  const c = await client({ "x-forwarded-for": "203.0.113.11" });
+  const d = await client({ "x-forwarded-for": "203.0.113.10" });
+  t.after(() => [a, b, c, d].forEach((ws) => ws.terminate()));
+  async function register(ws, device = "desktop") {
+    const room = next(ws, "room");
+    const list = next(ws, "devices");
+    send(ws, { type: "create", device, discovery: true });
+    return { ...(await room), ...(await list) };
+  }
+  const originalA = await register(a);
+  assert.deepEqual(originalA.devices, []);
+  const updatedA = next(a, "devices");
+  const originalB = await register(b, "mobile");
+  assert.equal((await updatedA).devices[0].id, originalB.self.id);
+  assert.equal(originalB.devices[0].id, originalA.self.id);
+  assert.equal(originalB.self.device, "mobile");
+  assert.equal(originalB.devices[0].code, undefined);
+  const originalC = await register(c);
+  assert.deepEqual(originalC.devices, []);
+  const denied = next(c, "error");
+  send(c, { type: "connect-device", id: originalA.self.id });
+  await denied;
+  await register(d);
+  const pairedA = next(a, "peer-joined");
+  const pairedB = next(b, "peer-joined");
+  const busyList = next(d, "devices");
+  send(a, { type: "connect-device", id: originalB.self.id });
+  assert.equal((await pairedA).initiator, false);
+  assert.equal((await pairedB).initiator, true);
+  assert.ok((await busyList).devices.every((device) => !device.available));
+  const occupied = next(d, "error");
+  send(d, { type: "connect-device", id: originalB.self.id });
+  assert.match((await occupied).message, /正在连接其他设备/);
+  const missing = next(c, "error");
+  send(c, { type: "join", code: originalA.code });
+  // C still owns its original waiting room after the rejected discovery request.
+  assert.match((await missing).message, /请先断开/);
+  const signal = next(b, "signal");
+  send(a, { type: "signal", signal: { candidate: "discovered-peer" } });
+  assert.equal((await signal).signal.candidate, "discovered-peer");
+  const left = next(b, "peer-left");
+  const offline = next(d, "devices");
+  a.close();
+  await left;
+  const remaining = (await offline).devices;
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].id, originalB.self.id);
+  assert.equal(remaining[0].available, true);
+  const reconnected = next(b, "peer-joined");
+  send(d, { type: "connect-device", id: originalB.self.id });
+  await reconnected;
+});
 test("private scan token connects two devices, isolates signaling, and allows reconnect", async () => {
   const a = await client();
   const b = await client();

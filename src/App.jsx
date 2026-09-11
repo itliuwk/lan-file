@@ -58,6 +58,8 @@ export default function App() {
   const [network, setNetwork] = useState({ interfaces: [], clientIp: "" });
   const [shareHost, setShareHost] = useState(location.hostname);
   const [peer, setPeer] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [self, setSelf] = useState(null);
   const [qr, setQr] = useState("");
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
@@ -136,6 +138,7 @@ export default function App() {
               type: initialCode && location.search ? "join" : "create",
               code: initialCode,
               device: isMobile ? "mobile" : "desktop",
+              discovery: true,
             }),
           );
         }
@@ -152,13 +155,16 @@ export default function App() {
           clearTimeout(actionTimer.current);
           setBusy(false);
         }
-        if (data.type === "room") {
+        if (data.type === "devices") {
+          setDevices(data.devices);
+          setSelf(data.self);
+        } else if (data.type === "room") {
           setRoom(data.code);
           setPhase("waiting");
           setError("");
         } else if (data.type === "peer-joined") {
           resetConnection();
-          setPeer({ ip: data.ip, device: data.device });
+          setPeer({ ip: data.ip, device: data.device, name: data.name });
           setPhase("connecting");
           try {
             const transport = new TransferConnection({
@@ -197,7 +203,7 @@ export default function App() {
           resetConnection();
           setPhase("waiting");
           connectedOnce.current = false;
-          notify("对方已断开，重新扫码即可连接。");
+          notify("对方已断开，可通过发现设备或扫码重新连接。");
         } else if (data.type === "left" || data.type === "expired") {
           resetConnection();
           setRoom("");
@@ -209,6 +215,7 @@ export default function App() {
               JSON.stringify({
                 type: "create",
                 device: isMobile ? "mobile" : "desktop",
+                discovery: true,
               }),
             );
           }
@@ -219,6 +226,8 @@ export default function App() {
       ws.onclose = () => {
         if (stopped) return;
         setOnline(false);
+        setDevices([]);
+        setSelf(null);
         setBusy(false);
         resetConnection();
         setRoom("");
@@ -320,10 +329,15 @@ export default function App() {
     };
   }, [modal]);
 
-  function roomAction(type) {
+  function roomAction(type, extra = {}) {
     setError("");
     try {
-      sendSignal({ type, device: isMobile ? "mobile" : "desktop" });
+      sendSignal({
+        type,
+        device: isMobile ? "mobile" : "desktop",
+        discovery: true,
+        ...extra,
+      });
       setBusy(true);
       clearTimeout(actionTimer.current);
       actionTimer.current = setTimeout(() => {
@@ -333,6 +347,13 @@ export default function App() {
     } catch (e) {
       setError(e.message);
     }
+  }
+  function connectDevice(id) {
+    if (!online || busy || phase !== "waiting") return;
+    history.replaceState(null, "", location.pathname);
+    setMessages([]);
+    setDraft("");
+    roomAction("connect-device", { id });
   }
   function leaveRoom() {
     try {
@@ -783,6 +804,68 @@ export default function App() {
                     <Wifi size={16} />
                     <span>请确保两台设备连接同一个 Wi-Fi 或局域网</span>
                   </div>
+                  <section
+                    className="discovery-panel"
+                    aria-labelledby="discovery-title"
+                  >
+                    <div className="discovery-heading">
+                      <h3 id="discovery-title">
+                        <Wifi size={16} />
+                        发现设备
+                      </h3>
+                      <span>
+                        {online ? `${devices.length} 台在线` : "正在连接服务"}
+                      </span>
+                    </div>
+                    <p className="discovery-self">
+                      本机标识：{self?.name || "正在获取…"}
+                    </p>
+                    {devices.length ? (
+                      <ul className="discovery-list">
+                        {devices.map((device) => (
+                          <li key={device.id}>
+                            <span className="discovery-icon">
+                              {device.device === "mobile" ? (
+                                <Smartphone size={20} />
+                              ) : (
+                                <Laptop size={20} />
+                              )}
+                            </span>
+                            <div className="discovery-detail">
+                              <strong>{device.name}</strong>
+                              <small>
+                                {device.ip} ·{" "}
+                                {device.available ? "等待连接" : "使用中"}
+                              </small>
+                            </div>
+                            <button
+                              className="mini-primary"
+                              aria-label={`连接 ${device.name}`}
+                              disabled={
+                                !online ||
+                                busy ||
+                                phase !== "waiting" ||
+                                !device.available
+                              }
+                              onClick={() => connectDevice(device.id)}
+                            >
+                              {device.available ? "连接" : "使用中"}
+                              <ArrowUpRight size={13} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="discovery-empty" role="status">
+                        {online
+                          ? "暂未发现其他设备，让对方也打开同一个轻传网站。"
+                          : "服务连接后会自动发现在线设备。"}
+                      </p>
+                    )}
+                    <p className="discovery-note">
+                      列表自动更新，点击连接即可开始分享。
+                    </p>
+                  </section>
                 </div>
               ) : (
                 <div
@@ -1059,9 +1142,9 @@ export default function App() {
                   <li>
                     <span>02</span>
                     <div>
-                      <h3>打开相机，扫一扫</h3>
+                      <h3>发现设备，或扫一扫</h3>
                       <p>
-                        打开页面就会自动生成二维码。用另一台设备的相机扫码，在浏览器打开链接，设备会自动连接。也可以复制连接链接，在另一台设备打开。
+                        两台设备打开同一个轻传网站，在「发现设备」中核对对方的本机标识，点击「连接」即可主动连接。也可以扫描二维码或复制连接链接，在另一台设备打开。
                       </p>
                     </div>
                   </li>
